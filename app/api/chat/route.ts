@@ -56,58 +56,56 @@ export async function POST(request: NextRequest) {
 
       // Extract and save ideas (improved extraction for structured format)
       // Handle format like: "1. Angle: "..."\nExplanation: ...\nFramework: ..."
-      const structuredPattern = /(\d+)[\.\)]\s*Angle[:\s]+["']?([^"'\n]+)["']?\s*\n\s*Explanation[:\s]+([^\n]+(?:\n(?!\d+[\.\)]|Framework)[^\n]+)*)\s*\n\s*Framework[:\s]+([^\n]+)/gmi
-      const simplePattern = /(\d+)[\.\)]\s*(.+?)(?=\n\s*\d+[\.\)]|$)/gms
       
-      let ideaMatches: RegExpMatchArray | null = null
-      let isStructured = false
+      // Split content by numbered items
+      const sections = content.split(/(?=\d+[\.\)]\s*Angle[:\s]+)/i)
       
-      // Try structured format first
-      ideaMatches = content.match(structuredPattern)
-      if (ideaMatches) {
-        isStructured = true
-      } else {
-        // Fall back to simple numbered list
-        ideaMatches = content.match(simplePattern)
-      }
-      
-      if (ideaMatches) {
-        for (const match of ideaMatches) {
-          let ideaText = ''
-          
-          if (isStructured) {
-            // Extract just the angle headline from structured format
-            const angleMatch = match.match(/Angle[:\s]+["']?([^"'\n]+)["']?/i)
-            if (angleMatch && angleMatch[1]) {
-              ideaText = angleMatch[1].trim()
-            } else {
-              // Fallback: extract first line after number
-              ideaText = match.replace(/^\d+[\.\)]\s*/, '').split('\n')[0].trim()
-            }
-          } else {
-            // Simple format: extract the content, clean it up
-            ideaText = match
-              .replace(/^\d+[\.\)]\s*/, '')
-              .replace(/^Angle[:\s]+/i, '')
-              .replace(/["']/g, '')
-              .split('\n')[0] // Take first line only
-              .trim()
-          }
-          
-          // Clean up any remaining formatting
-          ideaText = ideaText
-            .replace(/^["']|["']$/g, '') // Remove quotes
-            .replace(/\s+/g, ' ') // Normalize whitespace
+      for (const section of sections) {
+        if (!section.trim()) continue
+        
+        // Try to extract angle from structured format
+        let angleMatch = section.match(/Angle[:\s]+["']?([^"'\n]+)["']?/i)
+        
+        if (angleMatch && angleMatch[1]) {
+          let ideaText = angleMatch[1]
+            .replace(/^["']|["']$/g, '') // Remove surrounding quotes
             .trim()
           
-          // If it's a valid idea, save it
+          // If we got a valid angle, save it
           if (ideaText.length > 10 && ideaText.length < 300) {
-            await prisma.idea.create({
-              data: {
-                conversationId,
-                content: ideaText,
-              },
-            })
+            try {
+              await prisma.idea.create({
+                data: {
+                  conversationId,
+                  content: ideaText,
+                },
+              })
+            } catch (error) {
+              console.error('Error saving idea:', error)
+            }
+          }
+        } else {
+          // Fallback: try to extract from simple numbered format
+          const simpleMatch = section.match(/^\d+[\.\)]\s*(.+?)(?=\n\s*(?:Explanation|Framework|\d+[\.\)])|$)/s)
+          if (simpleMatch && simpleMatch[1]) {
+            let ideaText = simpleMatch[1]
+              .replace(/^Angle[:\s]+/i, '')
+              .replace(/["']/g, '')
+              .split('\n')[0]
+              .trim()
+            
+            if (ideaText.length > 10 && ideaText.length < 300) {
+              try {
+                await prisma.idea.create({
+                  data: {
+                    conversationId,
+                    content: ideaText,
+                  },
+                })
+              } catch (error) {
+                console.error('Error saving idea:', error)
+              }
+            }
           }
         }
       }
