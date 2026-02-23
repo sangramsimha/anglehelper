@@ -38,6 +38,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     fetchConversation()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId])
 
   useEffect(() => {
