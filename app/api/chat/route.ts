@@ -57,42 +57,50 @@ export async function POST(request: NextRequest) {
       // Extract and save ideas (improved extraction for structured format)
       // Handle format like: "1. Angle: "..."\nExplanation: ...\nFramework: ..."
       
-      // Split content by numbered items
-      const sections = content.split(/(?=\d+[\.\)]\s*Angle[:\s]+)/i)
+      let ideasExtracted = 0
       
-      for (const section of sections) {
-        if (!section.trim()) continue
+      // Method 1: Try structured format with "Angle:" label
+      const anglePattern = /\d+[\.\)]\s*Angle[:\s]+["']?([^"'\n]+)["']?/gi
+      let match
+      while ((match = anglePattern.exec(content)) !== null) {
+        let ideaText = match[1]
+          .replace(/^["']|["']$/g, '')
+          .trim()
         
-        // Try to extract angle from structured format
-        let angleMatch = section.match(/Angle[:\s]+["']?([^"'\n]+)["']?/i)
-        
-        if (angleMatch && angleMatch[1]) {
-          let ideaText = angleMatch[1]
-            .replace(/^["']|["']$/g, '') // Remove surrounding quotes
-            .trim()
-          
-          // If we got a valid angle, save it
-          if (ideaText.length > 10 && ideaText.length < 300) {
-            try {
-              await prisma.idea.create({
-                data: {
-                  conversationId,
-                  content: ideaText,
-                },
-              })
-            } catch (error) {
-              console.error('Error saving idea:', error)
-            }
+        if (ideaText.length > 10 && ideaText.length < 300) {
+          try {
+            await prisma.idea.create({
+              data: {
+                conversationId,
+                content: ideaText,
+              },
+            })
+            ideasExtracted++
+          } catch (error) {
+            console.error('Error saving idea:', error)
           }
-        } else {
-          // Fallback: try to extract from simple numbered format
-          const simpleMatch = section.match(/^\d+[\.\)]\s*(.+?)(?=\n\s*(?:Explanation|Framework|\d+[\.\)])|$)/s)
-          if (simpleMatch && simpleMatch[1]) {
-            let ideaText = simpleMatch[1]
+        }
+      }
+      
+      // Method 2: If no ideas extracted, try simple numbered list
+      if (ideasExtracted === 0) {
+        const simplePattern = /\d+[\.\)]\s*(.+?)(?=\n\s*\d+[\.\)]|$)/gms
+        const simpleMatches = content.match(simplePattern)
+        
+        if (simpleMatches) {
+          for (const match of simpleMatches) {
+            let ideaText = match
+              .replace(/^\d+[\.\)]\s*/, '')
               .replace(/^Angle[:\s]+/i, '')
               .replace(/["']/g, '')
               .split('\n')[0]
               .trim()
+            
+            // Skip if it looks like it's part of Explanation or Framework
+            if (ideaText.toLowerCase().startsWith('explanation') || 
+                ideaText.toLowerCase().startsWith('framework')) {
+              continue
+            }
             
             if (ideaText.length > 10 && ideaText.length < 300) {
               try {
@@ -102,6 +110,7 @@ export async function POST(request: NextRequest) {
                     content: ideaText,
                   },
                 })
+                ideasExtracted++
               } catch (error) {
                 console.error('Error saving idea:', error)
               }
@@ -109,6 +118,8 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+      
+      console.log(`Extracted ${ideasExtracted} ideas from content`)
 
       return NextResponse.json({ content })
     }
