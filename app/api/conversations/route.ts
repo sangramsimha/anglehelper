@@ -21,14 +21,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Use a transaction to avoid prepared statement conflicts
-    const conversation = await prisma.$transaction(async (tx) => {
-      return await tx.conversation.create({
+    // Create conversation with error handling for prepared statement conflicts
+    let conversation
+    try {
+      conversation = await prisma.conversation.create({
         data: {
           productDescription: productDescription.trim(),
         },
       })
-    })
+    } catch (createError: any) {
+      // If we get a prepared statement error, retry once
+      if (createError?.message?.includes('prepared statement') || createError?.code === '42P05') {
+        console.log('Retrying after prepared statement error...')
+        // Wait a bit and retry
+        await new Promise(resolve => setTimeout(resolve, 100))
+        conversation = await prisma.conversation.create({
+          data: {
+            productDescription: productDescription.trim(),
+          },
+        })
+      } else {
+        throw createError
+      }
+    }
 
     return NextResponse.json({ id: conversation.id })
   } catch (error: any) {

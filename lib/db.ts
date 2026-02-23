@@ -16,6 +16,9 @@ if (databaseUrl.startsWith('prisma://')) {
 }
 
 // Configure Prisma Client for serverless environments
+// Use connection pooling URL if available (Supabase pooler uses port 6543)
+const isPoolerUrl = databaseUrl.includes(':6543/') || databaseUrl.includes('.pooler.supabase.com')
+
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   datasources: {
@@ -23,23 +26,24 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
       url: databaseUrl,
     },
   },
-  // Disable prepared statements to avoid "prepared statement already exists" error in serverless
-  // This is a workaround for Netlify/serverless environments
-  __internal: {
-    engine: {
-      connectTimeout: 60000,
-    },
-  },
 })
 
-// In production (serverless), don't reuse the client to avoid prepared statement conflicts
+// In production (serverless), handle connection cleanup
 if (process.env.NODE_ENV === 'production') {
-  // Disconnect after each request in serverless
-  if (typeof globalThis !== 'undefined') {
-    // Clean up on process exit
-    process.on('beforeExit', async () => {
-      await prisma.$disconnect()
-    })
+  // Ensure we disconnect properly in serverless
+  if (typeof process !== 'undefined') {
+    const disconnect = async () => {
+      try {
+        await prisma.$disconnect()
+      } catch (e) {
+        // Ignore disconnect errors
+      }
+    }
+    
+    // Clean up on various exit signals
+    process.on('SIGINT', disconnect)
+    process.on('SIGTERM', disconnect)
+    process.on('beforeExit', disconnect)
   }
 } else {
   // In development, reuse the client
