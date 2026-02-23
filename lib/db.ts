@@ -5,7 +5,7 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 // Validate DATABASE_URL
-const databaseUrl = process.env.DATABASE_URL
+let databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) {
   throw new Error('DATABASE_URL environment variable is not set')
 }
@@ -13,6 +13,15 @@ if (!databaseUrl) {
 // Ensure we're using direct PostgreSQL connection, not Data Proxy
 if (databaseUrl.startsWith('prisma://')) {
   throw new Error('DATABASE_URL should use postgresql:// protocol, not prisma://')
+}
+
+// For Supabase connection pooler, add parameters to avoid prepared statement conflicts
+if (databaseUrl.includes('.pooler.supabase.com') || databaseUrl.includes(':6543/')) {
+  // Add connection parameters for pooler
+  const url = new URL(databaseUrl)
+  url.searchParams.set('pgbouncer', 'true')
+  url.searchParams.set('connection_limit', '1')
+  databaseUrl = url.toString()
 }
 
 // Configure Prisma Client for serverless environments
