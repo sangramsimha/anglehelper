@@ -25,9 +25,6 @@ if (databaseUrl.includes('.pooler.supabase.com') || databaseUrl.includes(':6543/
 }
 
 // Configure Prisma Client for serverless environments
-// Use connection pooling URL if available (Supabase pooler uses port 6543)
-const isPoolerUrl = databaseUrl.includes(':6543/') || databaseUrl.includes('.pooler.supabase.com')
-
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   datasources: {
