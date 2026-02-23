@@ -29,7 +29,9 @@ export default function Home() {
 
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.error || 'Failed to create conversation')
+        const errorMsg = data.error || 'Failed to create conversation'
+        const details = data.details ? `: ${data.details}` : ''
+        throw new Error(`${errorMsg}${details}`)
       }
 
       const data = await response.json()

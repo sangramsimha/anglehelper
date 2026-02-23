@@ -12,6 +12,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate database connection
+    if (!prisma) {
+      console.error('Prisma client is not initialized')
+      return NextResponse.json(
+        { error: 'Database connection error' },
+        { status: 500 }
+      )
+    }
+
     const conversation = await prisma.conversation.create({
       data: {
         productDescription: productDescription.trim(),
@@ -21,8 +30,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ id: conversation.id })
   } catch (error) {
     console.error('Error creating conversation:', error)
+    
+    // Return more specific error message
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json(
-      { error: 'Failed to create conversation' },
+      { 
+        error: 'Failed to create conversation',
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+      },
       { status: 500 }
     )
   }
