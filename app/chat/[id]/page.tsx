@@ -102,6 +102,30 @@ export default function ChatPage() {
     }
   }
 
+  const handleEvaluateAll = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId,
+          action: 'evaluate_all',
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to evaluate all ideas')
+      await fetchConversation()
+      // Update evaluated count to match all ideas
+      const updatedData = await fetch(`/api/conversations/${conversationId}`).then(r => r.json())
+      setEvaluatedCount(updatedData.ideas?.filter((i: Idea) => i.evaluations?.length > 0).length || 0)
+    } catch (error) {
+      console.error('Error evaluating all ideas:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleGenerateFinal = async () => {
     setIsLoading(true)
     try {
@@ -177,7 +201,7 @@ export default function ChatPage() {
                     <ReactMarkdown>{message.content}</ReactMarkdown>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap">{message.content}</div>
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
                 )}
               </div>
             </div>
@@ -188,38 +212,56 @@ export default function ChatPage() {
         {/* Ideas List */}
         {hasGeneratedIdeas && (
           <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-lg p-6 mb-6">
-            <h2 className="text-xl font-bold mb-4">Generated Ideas</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">Generated Ideas ({ideas.length})</h2>
+              {evaluatedCount < ideas.length && (
+                <button
+                  onClick={handleEvaluateAll}
+                  disabled={isLoading}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-50 font-medium"
+                >
+                  {isLoading ? 'Evaluating All...' : `Evaluate All (${ideas.length - evaluatedCount} remaining)`}
+                </button>
+              )}
+            </div>
             <div className="space-y-4">
-              {ideas.map((idea) => {
+              {ideas.map((idea, index) => {
                 const evaluation = idea.evaluations?.[0]
                 return (
                   <div
                     key={idea.id}
-                    className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+                    className="border border-gray-200 dark:border-gray-700 rounded-lg p-5 hover:shadow-md transition-shadow"
                   >
-                    <p className="mb-3">{idea.content}</p>
+                    <div className="flex items-start gap-3 mb-3">
+                      <span className="flex-shrink-0 w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center font-semibold text-purple-600 dark:text-purple-400">
+                        {index + 1}
+                      </span>
+                      <p className="flex-1 text-gray-800 dark:text-gray-200 leading-relaxed">{idea.content}</p>
+                    </div>
                     {evaluation ? (
-                      <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-semibold">Evaluation:</span>
+                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className="font-semibold text-gray-800 dark:text-gray-200">Evaluation:</span>
                           {evaluation.overallScore && (
-                            <span className="text-lg font-bold text-green-600 dark:text-green-400">
-                              {evaluation.overallScore}/10
+                            <span className="text-xl font-bold text-green-600 dark:text-green-400">
+                              {evaluation.overallScore.toFixed(1)}/10
                             </span>
                           )}
                         </div>
-                        <div className="prose dark:prose-invert max-w-none text-sm">
+                        <div className="prose dark:prose-invert max-w-none text-sm text-gray-700 dark:text-gray-300">
                           <ReactMarkdown>{evaluation.notes || ''}</ReactMarkdown>
                         </div>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => handleEvaluate(idea.id)}
-                        disabled={evaluatingId === idea.id}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                      >
-                        {evaluatingId === idea.id ? 'Evaluating...' : 'Evaluate'}
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEvaluate(idea.id)}
+                          disabled={evaluatingId === idea.id || isLoading}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm font-medium"
+                        >
+                          {evaluatingId === idea.id ? 'Evaluating...' : 'Evaluate'}
+                        </button>
+                      </div>
                     )}
                   </div>
                 )
@@ -242,9 +284,9 @@ export default function ChatPage() {
             <button
               onClick={handleGenerateFinal}
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50"
+              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 shadow-lg hover:shadow-xl"
             >
-              {isLoading ? 'Generating...' : 'Generate 2 Final High-Potential Angles'}
+              {isLoading ? 'Generating...' : 'Generate 3 Final Chosen Angles'}
             </button>
           ) : (
             <p className="text-center text-gray-600 dark:text-gray-400">

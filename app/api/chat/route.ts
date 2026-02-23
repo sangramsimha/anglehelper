@@ -54,12 +54,22 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Extract and save ideas (simple extraction - you can improve this)
-      const ideaMatches = content.match(/\d+[\.\)]\s*([\s\S]+?)(?=\n\n|\d+[\.\)]|$)/gm)
+      // Extract and save ideas (improved extraction)
+      // Look for numbered items with "Angle:" or similar patterns
+      const anglePattern = /(?:^|\n)\s*\d+[\.\)]\s*(?:Angle[:\s]+)?(.+?)(?=\n\s*\d+[\.\)]|$)/gms
+      const ideaMatches = content.match(anglePattern) || content.match(/\d+[\.\)]\s*([\s\S]+?)(?=\n\n|\d+[\.\)]|$)/gm)
+      
       if (ideaMatches) {
         for (const match of ideaMatches) {
-          const ideaText = match.replace(/^\d+[\.\)]\s*/, '').trim()
-          if (ideaText.length > 20) {
+          // Clean up the match - remove numbering and "Angle:" prefix
+          let ideaText = match
+            .replace(/^\d+[\.\)]\s*/, '')
+            .replace(/^Angle[:\s]+/i, '')
+            .replace(/\n\s*(?:Explanation|Framework)[:\s].*$/is, '')
+            .trim()
+          
+          // If it's too short or just whitespace, skip
+          if (ideaText.length > 20 && ideaText.length < 500) {
             await prisma.idea.create({
               data: {
                 conversationId,
@@ -123,6 +133,72 @@ export async function POST(request: NextRequest) {
       })
 
       return NextResponse.json({ content, evaluationId: evaluation.id, overallScore })
+    }
+
+    if (action === 'evaluate_all') {
+      // Evaluate all ideas at once
+      const ideas = await prisma.idea.findMany({
+        where: { conversationId },
+        include: { evaluations: true },
+      })
+
+      const unevaluatedIdeas = ideas.filter(idea => idea.evaluations.length === 0)
+
+      if (unevaluatedIdeas.length === 0) {
+        return NextResponse.json(
+          { error: 'All ideas have already been evaluated' },
+          { status: 400 }
+        )
+      }
+
+      const evaluations = []
+      for (const idea of unevaluatedIdeas) {
+        const prompt = getEvaluationPrompt(idea.content, conversation.productDescription)
+
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            { role: 'system', content: 'You are an expert marketing evaluator using the Big Marketing Idea Formula.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.7,
+        })
+
+        const content = completion.choices[0]?.message?.content || 'No evaluation generated'
+
+        // Extract score
+        const scoreMatch = content.match(/(?:rating|score|overall)[:\s]*(\d+(?:\.\d+)?)\s*(?:out of|\/)\s*10/i)
+        const overallScore = scoreMatch ? parseFloat(scoreMatch[1]) : null
+
+        // Save evaluation
+        await prisma.evaluation.create({
+          data: {
+            ideaId: idea.id,
+            overallScore,
+            notes: content,
+          },
+        })
+
+        evaluations.push({
+          ideaId: idea.id,
+          content,
+          overallScore,
+        })
+      }
+
+      // Save summary message
+      const summaryContent = `Evaluated ${evaluations.length} ideas:\n\n${evaluations.map((e, i) => `**Idea ${i + 1}:**\n${e.content}\n`).join('\n---\n\n')}`
+
+      await prisma.message.create({
+        data: {
+          conversationId,
+          role: 'assistant',
+          content: summaryContent,
+          messageType: 'evaluation',
+        },
+      })
+
+      return NextResponse.json({ evaluations, count: evaluations.length })
     }
 
     if (action === 'generate_final' && evaluatedIdeas && evaluations) {

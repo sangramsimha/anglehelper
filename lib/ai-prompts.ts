@@ -89,16 +89,16 @@ ${evaluatedIdeas.map((idea, i) => `${i + 1}. ${idea}`).join('\n')}
 Evaluation Insights:
 ${evaluations.map((evaluation, i) => `Idea ${i + 1}:\n${evaluation}`).join('\n\n')}
 
-Generate 2 NEW marketing angles that:
+Generate 3 FINAL marketing angles that:
 - Address the weaknesses identified in previous evaluations
 - Build on the strengths that worked
 - Are likely to score 8+ on the Big Marketing Idea Formula
-- Are fresh and different from the previous angles
+- Can be either improved versions of previous angles OR completely new angles
 
 For each angle, provide:
 - The angle/headline
 - Brief explanation of why it should score highly
 - Which elements of the formula it addresses
 
-Format as 2 distinct, high-potential angles.`
+Format as 3 distinct, high-potential angles, clearly numbered.`
 }
