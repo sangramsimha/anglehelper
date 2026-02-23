@@ -87,7 +87,7 @@ Previous Ideas Evaluated:
 ${evaluatedIdeas.map((idea, i) => `${i + 1}. ${idea}`).join('\n')}
 
 Evaluation Insights:
-${evaluations.map((eval, i) => `Idea ${i + 1}:\n${eval}`).join('\n\n')}
+${evaluations.map((evaluation, i) => `Idea ${i + 1}:\n${evaluation}`).join('\n\n')}
 
 Generate 2 NEW marketing angles that:
 - Address the weaknesses identified in previous evaluations
