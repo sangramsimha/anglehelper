@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       })
 
       // Extract and save ideas (simple extraction - you can improve this)
-      const ideaMatches = content.match(/\d+[\.\)]\s*(.+?)(?=\n\n|\d+[\.\)]|$)/gms)
+      const ideaMatches = content.match(/\d+[\.\)]\s*([\s\S]+?)(?=\n\n|\d+[\.\)]|$)/gm)
       if (ideaMatches) {
         for (const match of ideaMatches) {
           const ideaText = match.replace(/^\d+[\.\)]\s*/, '').trim()
