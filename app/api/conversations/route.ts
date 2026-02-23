@@ -28,15 +28,24 @@ export async function POST(request: NextRequest) {
     })
 
     return NextResponse.json({ id: conversation.id })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating conversation:', error)
     
-    // Return more specific error message
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    // Return more specific error message based on error type
+    let errorMessage = 'Failed to create conversation'
+    
+    if (error?.code === 'P1001') {
+      errorMessage = 'Database connection failed. Please check your database connection.'
+    } else if (error?.code === 'P2002') {
+      errorMessage = 'A conversation with this description already exists.'
+    } else if (error instanceof Error) {
+      errorMessage = error.message
+    }
+    
     return NextResponse.json(
       { 
-        error: 'Failed to create conversation',
-        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? (error?.message || String(error)) : undefined
       },
       { status: 500 }
     )
