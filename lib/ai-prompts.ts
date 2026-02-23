@@ -34,12 +34,12 @@ Generate 5-7 diverse marketing angles/ideas using these frameworks:
 - Proclamation Lead: Bold statement
 - Story Lead: Narrative engagement
 
-For each angle, provide:
-- A compelling headline/angle
-- Brief explanation (1-2 sentences)
-- Which framework(s) it uses
+For each angle, provide in this exact format:
+1. Angle: "Your compelling headline/angle here"
+   Explanation: Brief explanation (1-2 sentences)
+   Framework: Which framework(s) it uses
 
-Format your response as a clear list of angles.`
+Format your response as a numbered list with this structure for each angle.`
 }
 
 export function getEvaluationPrompt(idea: string, productDescription: string): string {

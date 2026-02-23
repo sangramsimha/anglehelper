@@ -54,22 +54,54 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Extract and save ideas (improved extraction)
-      // Look for numbered items with "Angle:" or similar patterns
-      const anglePattern = /(?:^|\n)\s*\d+[\.\)]\s*(?:Angle[:\s]+)?(.+?)(?=\n\s*\d+[\.\)]|$)/gms
-      const ideaMatches = content.match(anglePattern) || content.match(/\d+[\.\)]\s*([\s\S]+?)(?=\n\n|\d+[\.\)]|$)/gm)
+      // Extract and save ideas (improved extraction for structured format)
+      // Handle format like: "1. Angle: "..."\nExplanation: ...\nFramework: ..."
+      const structuredPattern = /(\d+)[\.\)]\s*Angle[:\s]+["']?([^"'\n]+)["']?\s*\n\s*Explanation[:\s]+([^\n]+(?:\n(?!\d+[\.\)]|Framework)[^\n]+)*)\s*\n\s*Framework[:\s]+([^\n]+)/gmi
+      const simplePattern = /(\d+)[\.\)]\s*(.+?)(?=\n\s*\d+[\.\)]|$)/gms
+      
+      let ideaMatches: RegExpMatchArray | null = null
+      let isStructured = false
+      
+      // Try structured format first
+      ideaMatches = content.match(structuredPattern)
+      if (ideaMatches) {
+        isStructured = true
+      } else {
+        // Fall back to simple numbered list
+        ideaMatches = content.match(simplePattern)
+      }
       
       if (ideaMatches) {
         for (const match of ideaMatches) {
-          // Clean up the match - remove numbering and "Angle:" prefix
-          let ideaText = match
-            .replace(/^\d+[\.\)]\s*/, '')
-            .replace(/^Angle[:\s]+/i, '')
-            .replace(/\n\s*(?:Explanation|Framework)[:\s].*$/is, '')
+          let ideaText = ''
+          
+          if (isStructured) {
+            // Extract just the angle headline from structured format
+            const angleMatch = match.match(/Angle[:\s]+["']?([^"'\n]+)["']?/i)
+            if (angleMatch && angleMatch[1]) {
+              ideaText = angleMatch[1].trim()
+            } else {
+              // Fallback: extract first line after number
+              ideaText = match.replace(/^\d+[\.\)]\s*/, '').split('\n')[0].trim()
+            }
+          } else {
+            // Simple format: extract the content, clean it up
+            ideaText = match
+              .replace(/^\d+[\.\)]\s*/, '')
+              .replace(/^Angle[:\s]+/i, '')
+              .replace(/["']/g, '')
+              .split('\n')[0] // Take first line only
+              .trim()
+          }
+          
+          // Clean up any remaining formatting
+          ideaText = ideaText
+            .replace(/^["']|["']$/g, '') // Remove quotes
+            .replace(/\s+/g, ' ') // Normalize whitespace
             .trim()
           
-          // If it's too short or just whitespace, skip
-          if (ideaText.length > 20 && ideaText.length < 500) {
+          // If it's a valid idea, save it
+          if (ideaText.length > 10 && ideaText.length < 300) {
             await prisma.idea.create({
               data: {
                 conversationId,
