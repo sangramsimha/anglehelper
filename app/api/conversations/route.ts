@@ -21,10 +21,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const conversation = await prisma.conversation.create({
-      data: {
-        productDescription: productDescription.trim(),
-      },
+    // Use a transaction to avoid prepared statement conflicts
+    const conversation = await prisma.$transaction(async (tx) => {
+      return await tx.conversation.create({
+        data: {
+          productDescription: productDescription.trim(),
+        },
+      })
     })
 
     return NextResponse.json({ id: conversation.id })

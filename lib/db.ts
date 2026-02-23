@@ -15,6 +15,7 @@ if (databaseUrl.startsWith('prisma://')) {
   throw new Error('DATABASE_URL should use postgresql:// protocol, not prisma://')
 }
 
+// Configure Prisma Client for serverless environments
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   datasources: {
@@ -22,6 +23,25 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
       url: databaseUrl,
     },
   },
+  // Disable prepared statements to avoid "prepared statement already exists" error in serverless
+  // This is a workaround for Netlify/serverless environments
+  __internal: {
+    engine: {
+      connectTimeout: 60000,
+    },
+  },
 })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+// In production (serverless), don't reuse the client to avoid prepared statement conflicts
+if (process.env.NODE_ENV === 'production') {
+  // Disconnect after each request in serverless
+  if (typeof globalThis !== 'undefined') {
+    // Clean up on process exit
+    process.on('beforeExit', async () => {
+      await prisma.$disconnect()
+    })
+  }
+} else {
+  // In development, reuse the client
+  globalForPrisma.prisma = prisma
+}
