@@ -35,7 +35,12 @@ export default function Home() {
       }
 
       const data = await response.json()
-      router.push(`/chat/${data.id}`)
+      // Handle both response formats: { id } or { conversation: { id } }
+      const conversationId = data.id || data.conversation?.id
+      if (!conversationId) {
+        throw new Error('Invalid response from server')
+      }
+      router.push(`/chat/${conversationId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setIsLoading(false)
