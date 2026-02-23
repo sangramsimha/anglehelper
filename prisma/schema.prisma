@@ -1,0 +1,62 @@
+// Prisma schema - Direct PostgreSQL connection (NO Data Proxy)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Conversation {
+  id                String   @id @default(cuid())
+  title             String?
+  productDescription String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  messages          Message[]
+  ideas             Idea[]
+  
+  @@index([createdAt])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // "user" or "assistant"
+  content        String   @db.Text
+  messageType    String?  // "idea_generation" or "evaluation"
+  createdAt      DateTime @default(now())
+  
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+model Idea {
+  id             String   @id @default(cuid())
+  conversationId String
+  content        String   @db.Text
+  frameworkUsed  String?
+  createdAt      DateTime @default(now())
+  
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  evaluations    Evaluation[]
+  
+  @@index([conversationId])
+}
+
+model Evaluation {
+  id             String   @id @default(cuid())
+  ideaId         String
+  checklistScores String?  @db.Text
+  overallScore   Float?
+  notes          String?   @db.Text
+  createdAt      DateTime @default(now())
+  
+  idea           Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  
+  @@index([ideaId])
+}
