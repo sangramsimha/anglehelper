@@ -3,9 +3,15 @@ import OpenAI from 'openai'
 import { prisma } from '@/lib/db'
 import { getAngleGenerationPrompt, getEvaluationPrompt, getPostEvaluationAnglePrompt } from '@/lib/ai-prompts'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+function getOpenAIClient(): OpenAI {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is not configured')
+  }
+  return new OpenAI({
+    apiKey: apiKey.trim(),
+  })
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,14 +19,6 @@ export async function POST(request: NextRequest) {
     const { conversationId, action, ideaId, evaluatedIdeas, evaluations } = body
 
     console.log('Chat API called with:', { action, conversationId, ideaId })
-
-    if (!process.env.OPENAI_API_KEY) {
-      console.error('OpenAI API key is not configured')
-      return NextResponse.json(
-        { error: 'OpenAI API key is not configured' },
-        { status: 500 }
-      )
-    }
 
     if (!conversationId) {
       console.error('Missing conversationId')
@@ -30,9 +28,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: conversationId },
-    })
+    // Get OpenAI client
+    let openai: OpenAI
+    try {
+      openai = getOpenAIClient()
+    } catch (error) {
+      console.error('OpenAI client initialization error:', error)
+      return NextResponse.json(
+        { error: 'OpenAI API key is not configured' },
+        { status: 500 }
+      )
+    }
+
+    // Get conversation
+    let conversation
+    try {
+      conversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+      })
+    } catch (dbError) {
+      console.error('Database error fetching conversation:', dbError)
+      return NextResponse.json(
+        { error: 'Database error: Failed to fetch conversation' },
+        { status: 500 }
+      )
+    }
 
     if (!conversation) {
       return NextResponse.json(
@@ -350,8 +370,21 @@ export async function POST(request: NextRequest) {
     )
   } catch (error) {
     console.error('Error in chat API:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to process request'
+    const errorStack = error instanceof Error ? error.stack : undefined
+    
+    // Log full error details for debugging
+    console.error('Full error details:', {
+      message: errorMessage,
+      stack: errorStack,
+      error: error
+    })
+    
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to process request' },
+      { 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? errorStack : undefined
+      },
       { status: 500 }
     )
   }
