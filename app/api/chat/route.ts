@@ -166,8 +166,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ content, ideasExtracted })
 
         return NextResponse.json({ content, ideasExtracted })
-      } catch (generateError) {
+      } catch (generateError: any) {
         console.error('Error in generate action:', generateError)
+        
+        // Handle OpenAI API errors specifically
+        if (generateError?.status === 429 || generateError?.message?.includes('quota') || generateError?.message?.includes('billing')) {
+          return NextResponse.json(
+            { 
+              error: 'OpenAI API quota exceeded. Please check your OpenAI account billing and usage limits. The error message was: ' + (generateError?.message || 'Quota exceeded')
+            },
+            { status: 429 }
+          )
+        }
+        
         throw generateError
       }
     }
@@ -230,8 +241,19 @@ export async function POST(request: NextRequest) {
         })
 
         return NextResponse.json({ content, evaluationId: evaluation.id, overallScore })
-      } catch (openaiError) {
+      } catch (openaiError: any) {
         console.error('OpenAI API error:', openaiError)
+        
+        // Handle OpenAI API errors specifically
+        if (openaiError?.status === 429 || openaiError?.message?.includes('quota') || openaiError?.message?.includes('billing')) {
+          return NextResponse.json(
+            { 
+              error: 'OpenAI API quota exceeded. Please check your OpenAI account billing and usage limits. The error message was: ' + (openaiError?.message || 'Quota exceeded')
+            },
+            { status: 429 }
+          )
+        }
+        
         throw openaiError
       }
     }
@@ -299,8 +321,19 @@ export async function POST(request: NextRequest) {
           if (i < unevaluatedIdeas.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 500))
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Error evaluating idea ${idea.id}:`, error)
+          
+          // If it's a quota error, stop processing and return error
+          if (error?.status === 429 || error?.message?.includes('quota') || error?.message?.includes('billing')) {
+            return NextResponse.json(
+              { 
+                error: 'OpenAI API quota exceeded. Please check your OpenAI account billing and usage limits. The error message was: ' + (error?.message || 'Quota exceeded')
+              },
+              { status: 429 }
+            )
+          }
+          
           // Continue with other ideas even if one fails
         }
       }
@@ -384,8 +417,19 @@ export async function POST(request: NextRequest) {
       { error: 'Invalid action' },
       { status: 400 }
     )
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in chat API:', error)
+    
+    // Handle OpenAI quota/billing errors
+    if (error?.status === 429 || error?.message?.includes('quota') || error?.message?.includes('billing') || error?.message?.includes('exceeded')) {
+      return NextResponse.json(
+        { 
+          error: 'OpenAI API quota exceeded. Please check your OpenAI account billing and usage limits at https://platform.openai.com/account/billing. The error message was: ' + (error?.message || 'Quota exceeded')
+        },
+        { status: 429 }
+      )
+    }
+    
     const errorMessage = error instanceof Error ? error.message : 'Failed to process request'
     const errorStack = error instanceof Error ? error.stack : undefined
     

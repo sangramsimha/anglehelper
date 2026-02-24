@@ -84,6 +84,12 @@ export default function ChatPage() {
           console.error('Failed to parse error response:', e)
         }
         console.error('Error response:', errorData, 'Status:', response.status)
+        
+        // Special handling for quota errors
+        if (response.status === 429 || errorData.error?.includes('quota') || errorData.error?.includes('billing')) {
+          throw new Error('OpenAI API quota exceeded. Please check your OpenAI account billing at https://platform.openai.com/account/billing and ensure you have credits available.')
+        }
+        
         throw new Error(errorData.error || `Failed to generate: ${response.status} ${response.statusText}`)
       }
 
@@ -125,6 +131,12 @@ export default function ChatPage() {
           console.error('Failed to parse error response:', e)
         }
         console.error('Error response:', errorData, 'Status:', response.status)
+        
+        // Special handling for quota errors
+        if (response.status === 429 || errorData.error?.includes('quota') || errorData.error?.includes('billing')) {
+          throw new Error('OpenAI API quota exceeded. Please check your OpenAI account billing at https://platform.openai.com/account/billing and ensure you have credits available.')
+        }
+        
         throw new Error(errorData.error || `Failed to evaluate: ${response.status} ${response.statusText}`)
       }
 
@@ -177,6 +189,12 @@ export default function ChatPage() {
           console.error('Failed to parse error response:', e)
         }
         console.error('Error response:', errorData, 'Status:', response.status)
+        
+        // Special handling for quota errors
+        if (response.status === 429 || errorData.error?.includes('quota') || errorData.error?.includes('billing')) {
+          throw new Error('OpenAI API quota exceeded. Please check your OpenAI account billing at https://platform.openai.com/account/billing and ensure you have credits available.')
+        }
+        
         throw new Error(errorData.error || `Failed to evaluate all ideas: ${response.status} ${response.statusText}`)
       }
 
@@ -235,6 +253,12 @@ export default function ChatPage() {
           console.error('Failed to parse error response:', e)
         }
         console.error('Error response:', errorData, 'Status:', response.status)
+        
+        // Special handling for quota errors
+        if (response.status === 429 || errorData.error?.includes('quota') || errorData.error?.includes('billing')) {
+          throw new Error('OpenAI API quota exceeded. Please check your OpenAI account billing at https://platform.openai.com/account/billing and ensure you have credits available.')
+        }
+        
         throw new Error(errorData.error || `Failed to generate final angles: ${response.status} ${response.statusText}`)
       }
 
