@@ -62,29 +62,34 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'generate') {
-      // Generate marketing angles
-      const prompt = getAngleGenerationPrompt(conversation.productDescription)
-      
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          { role: 'system', content: 'You are an expert copywriter specializing in marketing angles and advertising ideas.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.8,
-      })
+      console.log('Generating angles for conversation:', conversationId)
+      try {
+        // Generate marketing angles
+        const prompt = getAngleGenerationPrompt(conversation.productDescription)
+        console.log('Prompt generated, calling OpenAI...')
+        
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            { role: 'system', content: 'You are an expert copywriter specializing in marketing angles and advertising ideas.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.8,
+        })
 
-      const content = completion.choices[0]?.message?.content || 'No response generated'
+        const content = completion.choices[0]?.message?.content || 'No response generated'
+        console.log('OpenAI response received, length:', content.length)
 
-      // Save assistant message
-      await prisma.message.create({
-        data: {
-          conversationId,
-          role: 'assistant',
-          content,
-          messageType: 'idea_generation',
-        },
-      })
+        // Save assistant message
+        await prisma.message.create({
+          data: {
+            conversationId,
+            role: 'assistant',
+            content,
+            messageType: 'idea_generation',
+          },
+        })
+        console.log('Message saved to database')
 
       // Extract and save ideas (improved extraction for structured format)
       // Handle format like: "1. Angle: "..."\nExplanation: ...\nFramework: ..."
@@ -151,9 +156,13 @@ export async function POST(request: NextRequest) {
         }
       }
       
-      console.log(`Extracted ${ideasExtracted} ideas from content`)
+        console.log(`Extracted ${ideasExtracted} ideas from content`)
 
-      return NextResponse.json({ content })
+        return NextResponse.json({ content, ideasExtracted })
+      } catch (generateError) {
+        console.error('Error in generate action:', generateError)
+        throw generateError
+      }
     }
 
     if (action === 'evaluate' && ideaId) {

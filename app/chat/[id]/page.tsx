@@ -60,8 +60,10 @@ export default function ChatPage() {
   }
 
   const handleGenerate = async () => {
+    console.log('handleGenerate called')
     setIsLoading(true)
     try {
+      console.log('Sending generate request...', { conversationId, action: 'generate' })
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,11 +73,27 @@ export default function ChatPage() {
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to generate')
+      console.log('Response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        let errorData: any = {}
+        try {
+          const text = await response.text()
+          errorData = text ? JSON.parse(text) : {}
+        } catch (e) {
+          console.error('Failed to parse error response:', e)
+        }
+        console.error('Error response:', errorData, 'Status:', response.status)
+        throw new Error(errorData.error || `Failed to generate: ${response.status} ${response.statusText}`)
+      }
+
       const data = await response.json()
+      console.log('Generate successful:', data)
       await fetchConversation()
     } catch (error) {
       console.error('Error generating angles:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate angles. Please check the console for details.'
+      alert(`Error: ${errorMessage}`)
     } finally {
       setIsLoading(false)
     }
@@ -184,6 +202,7 @@ export default function ChatPage() {
   }
 
   const handleGenerateFinal = async () => {
+    console.log('handleGenerateFinal called')
     setIsLoading(true)
     try {
       const evaluatedIdeas = ideas
@@ -193,6 +212,7 @@ export default function ChatPage() {
         .filter(i => i.evaluations?.length > 0)
         .map(i => i.evaluations[0].notes || '')
 
+      console.log('Sending generate_final request...', { conversationId, action: 'generate_final', evaluatedIdeasCount: evaluatedIdeas.length })
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,10 +224,27 @@ export default function ChatPage() {
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to generate final angles')
+      console.log('Response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        let errorData: any = {}
+        try {
+          const text = await response.text()
+          errorData = text ? JSON.parse(text) : {}
+        } catch (e) {
+          console.error('Failed to parse error response:', e)
+        }
+        console.error('Error response:', errorData, 'Status:', response.status)
+        throw new Error(errorData.error || `Failed to generate final angles: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('Generate final successful:', data)
       await fetchConversation()
     } catch (error) {
       console.error('Error generating final angles:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate final angles. Please check the console for details.'
+      alert(`Error: ${errorMessage}`)
     } finally {
       setIsLoading(false)
     }
