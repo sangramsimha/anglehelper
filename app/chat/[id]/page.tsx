@@ -99,8 +99,14 @@ export default function ChatPage() {
       console.log('Response status:', response.status, response.statusText)
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Error response:', errorData)
+        let errorData: any = {}
+        try {
+          const text = await response.text()
+          errorData = text ? JSON.parse(text) : {}
+        } catch (e) {
+          console.error('Failed to parse error response:', e)
+        }
+        console.error('Error response:', errorData, 'Status:', response.status)
         throw new Error(errorData.error || `Failed to evaluate: ${response.status} ${response.statusText}`)
       }
 
@@ -145,8 +151,14 @@ export default function ChatPage() {
       console.log('Response status:', response.status, response.statusText)
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Error response:', errorData)
+        let errorData: any = {}
+        try {
+          const text = await response.text()
+          errorData = text ? JSON.parse(text) : {}
+        } catch (e) {
+          console.error('Failed to parse error response:', e)
+        }
+        console.error('Error response:', errorData, 'Status:', response.status)
         throw new Error(errorData.error || `Failed to evaluate all ideas: ${response.status} ${response.statusText}`)
       }
 
