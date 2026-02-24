@@ -51,26 +51,59 @@ ${productDescription}
 Marketing Angle/Idea to Evaluate:
 ${idea}
 
-Evaluate this idea based on:
+Evaluate this idea based on the Big Marketing Idea Formula:
 
-1. Emotionally Compelling (EC) = Primary Promise (PP) + Unique Mechanism (UM)
-   - PP: Big, bold, audacious promise of transformation
-   - PP must be specific, concrete, and backed by proof
-   - UM: Unique piece/component/process that delivers the promise
+**Formula: Emotionally Compelling (Primary Promise + Unique Mechanism) + Intellectually Interesting = Big Marketing Idea**
 
-2. Intellectually Interesting (II)
-   - Piques curiosity
-   - Creates feeling of discovery
-   - Feels newsworthy
+## 1. EMOTIONALLY COMPELLING (EC) = Primary Promise (PP) + Unique Mechanism (UM)
 
-Provide:
-1. Overall Rating: A score from 1-10 (be specific, e.g., 7.5)
-2. Primary Promise Assessment: How strong is it? What's missing?
-3. Unique Mechanism Assessment: Is there one? How compelling?
-4. Intellectually Interesting Assessment: Does it create curiosity?
-5. Specific Improvement Feedback: What can be improved and how?
+### PRIMARY PROMISE (PP) Assessment:
+Evaluate if the idea has a Primary Promise that:
+- Tells the prospect what they stand to gain by engaging with the marketing message
+- Promises transformation, change, result, or outcome
+- Is BIG, BOLD, and AUDACIOUS (not just a product benefit)
+- Is SPECIFIC and CONCRETE (not vague or general)
+- Is backed by PROOF (can the promise be proven?)
+- Is believable (promise should not be bigger than the biggest proof point)
+- Uses Magic Wand Technique: If you could grant prospects any transformation, what would they ask for?
+- Uses Ideal Client Exercise: What result did the best customer experience?
 
-Format as clear, actionable feedback.`
+### UNIQUE MECHANISM (UM) Assessment:
+Evaluate if the idea has a Unique Mechanism that:
+- Is the unique piece, part, component, aspect, process, or system behind the product
+- Delivers the Primary Promise
+- Gives prospects hope that THIS time they'll experience the result
+- Can be:
+  * Actual mechanism (unique algorithm, component, process)
+  * Unspoken mechanism (something no one talks about)
+  * Transubstantiation mechanism (turning ordinary into extraordinary)
+
+## 2. INTELLECTUALLY INTERESTING (II) Assessment:
+Evaluate if the idea:
+- Piques the prospect's curiosity
+- Gives them a feeling of discovery
+- Makes them feel they've stumbled on something newsworthy
+- Would interest them even if there was no Primary Promise or Unique Mechanism
+- Creates an "AHA moment"
+- Feels like breaking news or something worth sharing
+
+## REQUIRED OUTPUT FORMAT:
+
+**Overall Rating:** [Score from 1-10, e.g., 7.5/10]
+
+**Primary Promise Assessment:**
+[Detailed evaluation of the Primary Promise - is it big, bold, specific, concrete, backed by proof? What's missing? What could be improved?]
+
+**Unique Mechanism Assessment:**
+[Detailed evaluation of the Unique Mechanism - is there one? Is it compelling? Does it deliver the promise? What type is it (actual/unspoken/transubstantiation)? What's missing?]
+
+**Intellectually Interesting Assessment:**
+[Detailed evaluation of whether it piques curiosity, creates discovery feeling, feels newsworthy. Does it create an AHA moment? What's missing?]
+
+**Specific Improvement Feedback:**
+[Concrete suggestions on how to improve the angle based on all three components. Be specific and actionable.]
+
+Format each section clearly with proper spacing for readability.`
 }
 
 export function getPostEvaluationAnglePrompt(

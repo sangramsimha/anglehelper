@@ -150,8 +150,9 @@ export async function POST(request: NextRequest) {
 
       const content = completion.choices[0]?.message?.content || 'No evaluation generated'
 
-      // Extract score (look for "1-10" or "rating" patterns)
-      const scoreMatch = content.match(/(?:rating|score|overall)[:\s]*(\d+(?:\.\d+)?)\s*(?:out of|\/)\s*10/i)
+      // Extract score (try multiple patterns)
+      const scoreMatch = content.match(/(?:Overall Rating|Rating|Score|overall rating)[:\s]*(\d+(?:\.\d+)?)\s*(?:out of|\/)?\s*10/i) ||
+                        content.match(/(\d+(?:\.\d+)?)\s*\/\s*10/i)
       const overallScore = scoreMatch ? parseFloat(scoreMatch[1]) : null
 
       // Save evaluation
@@ -193,53 +194,93 @@ export async function POST(request: NextRequest) {
       }
 
       const evaluations = []
-      for (const idea of unevaluatedIdeas) {
-        const prompt = getEvaluationPrompt(idea.content, conversation.productDescription)
+      for (let i = 0; i < unevaluatedIdeas.length; i++) {
+        const idea = unevaluatedIdeas[i]
+        try {
+          const prompt = getEvaluationPrompt(idea.content, conversation.productDescription)
 
-        const completion = await openai.chat.completions.create({
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: [
+              { role: 'system', content: 'You are an expert marketing evaluator using the Big Marketing Idea Formula. Always provide comprehensive evaluations covering Primary Promise, Unique Mechanism, and Intellectually Interesting components.' },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.7,
+          })
+
+          const content = completion.choices[0]?.message?.content || 'No evaluation generated'
+
+          // Extract score (try multiple patterns)
+          const scoreMatch = content.match(/(?:Overall Rating|Rating|Score|overall rating)[:\s]*(\d+(?:\.\d+)?)\s*(?:out of|\/)?\s*10/i) ||
+                            content.match(/(\d+(?:\.\d+)?)\s*\/\s*10/i)
+          const overallScore = scoreMatch ? parseFloat(scoreMatch[1]) : null
+
+          // Save evaluation
+          await prisma.evaluation.create({
+            data: {
+              ideaId: idea.id,
+              overallScore,
+              notes: content,
+            },
+          })
+
+          evaluations.push({
+            ideaId: idea.id,
+            content,
+            overallScore,
+          })
+
+          // Add a small delay to avoid rate limits
+          if (i < unevaluatedIdeas.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+        } catch (error) {
+          console.error(`Error evaluating idea ${idea.id}:`, error)
+          // Continue with other ideas even if one fails
+        }
+      }
+
+      // Generate final angles after all evaluations
+      if (evaluations.length > 0) {
+        const allIdeas = await prisma.idea.findMany({
+          where: { conversationId },
+          include: { evaluations: true },
+        })
+        const allIdeaContents = allIdeas.map(i => i.content)
+        const allEvaluationNotes = allIdeas.flatMap(i => i.evaluations.map(e => e.notes || ''))
+
+        const finalAnglesPrompt = getPostEvaluationAnglePrompt(
+          allIdeaContents,
+          allEvaluationNotes,
+          conversation.productDescription
+        )
+
+        const finalAnglesCompletion = await openai.chat.completions.create({
           model: 'gpt-4',
           messages: [
-            { role: 'system', content: 'You are an expert marketing evaluator using the Big Marketing Idea Formula.' },
-            { role: 'user', content: prompt },
+            { role: 'system', content: 'You are an expert copywriter generating high-potential marketing angles.' },
+            { role: 'user', content: finalAnglesPrompt },
           ],
-          temperature: 0.7,
+          temperature: 0.9,
         })
+        const finalAnglesContent = finalAnglesCompletion.choices[0]?.message?.content || 'No final angles generated'
 
-        const content = completion.choices[0]?.message?.content || 'No evaluation generated'
-
-        // Extract score
-        const scoreMatch = content.match(/(?:rating|score|overall)[:\s]*(\d+(?:\.\d+)?)\s*(?:out of|\/)\s*10/i)
-        const overallScore = scoreMatch ? parseFloat(scoreMatch[1]) : null
-
-        // Save evaluation
-        await prisma.evaluation.create({
+        await prisma.message.create({
           data: {
-            ideaId: idea.id,
-            overallScore,
-            notes: content,
+            conversationId,
+            role: 'assistant',
+            content: `## ✅ All Ideas Evaluated!\n\n${finalAnglesContent}`,
+            messageType: 'evaluation_summary',
           },
-        })
-
-        evaluations.push({
-          ideaId: idea.id,
-          content,
-          overallScore,
         })
       }
 
-      // Save summary message
-      const summaryContent = `Evaluated ${evaluations.length} ideas:\n\n${evaluations.map((e, i) => `**Idea ${i + 1}:**\n${e.content}\n`).join('\n---\n\n')}`
-
-      await prisma.message.create({
-        data: {
-          conversationId,
-          role: 'assistant',
-          content: summaryContent,
-          messageType: 'evaluation',
-        },
+      return NextResponse.json({ 
+        success: true,
+        evaluations, 
+        count: evaluations.length,
+        message: `Successfully evaluated ${evaluations.length} ideas` 
       })
-
-      return NextResponse.json({ evaluations, count: evaluations.length })
     }
 
     if (action === 'generate_final' && evaluatedIdeas && evaluations) {

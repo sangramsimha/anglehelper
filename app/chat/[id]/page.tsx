@@ -32,6 +32,8 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null)
   const [evaluatedCount, setEvaluatedCount] = useState(0)
+  const [evaluatingAll, setEvaluatingAll] = useState(false)
+  const [evaluationProgress, setEvaluationProgress] = useState({ current: 0, total: 0 })
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -103,7 +105,16 @@ export default function ChatPage() {
   }
 
   const handleEvaluateAll = async () => {
+    const unevaluatedCount = ideas.filter(i => i.evaluations?.length === 0).length
+    if (unevaluatedCount === 0) {
+      alert('All ideas have already been evaluated!')
+      return
+    }
+
+    setEvaluatingAll(true)
+    setEvaluationProgress({ current: 0, total: unevaluatedCount })
     setIsLoading(true)
+    
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -114,15 +125,27 @@ export default function ChatPage() {
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to evaluate all ideas')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to evaluate all ideas')
+      }
+
+      const data = await response.json()
+      setEvaluationProgress({ current: data.count || unevaluatedCount, total: unevaluatedCount })
+      
+      // Refresh conversation data
       await fetchConversation()
-      // Update evaluated count to match all ideas
+      
+      // Update evaluated count
       const updatedData = await fetch(`/api/conversations/${conversationId}`).then(r => r.json())
       setEvaluatedCount(updatedData.ideas?.filter((i: Idea) => i.evaluations?.length > 0).length || 0)
     } catch (error) {
       console.error('Error evaluating all ideas:', error)
+      alert(`Error: ${error instanceof Error ? error.message : 'Failed to evaluate all ideas'}`)
     } finally {
       setIsLoading(false)
+      setEvaluatingAll(false)
+      setEvaluationProgress({ current: 0, total: 0 })
     }
   }
 
@@ -215,13 +238,28 @@ export default function ChatPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">Generated Ideas ({ideas.length})</h2>
               {evaluatedCount < ideas.length && (
-                <button
-                  onClick={handleEvaluateAll}
-                  disabled={isLoading}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-50 font-medium"
-                >
-                  {isLoading ? 'Evaluating All...' : `Evaluate All (${ideas.length - evaluatedCount} remaining)`}
-                </button>
+                <div className="flex items-center gap-3">
+                  {evaluatingAll && evaluationProgress.total > 0 && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                      <span>Evaluating {evaluationProgress.current}/{evaluationProgress.total}...</span>
+                    </div>
+                  )}
+                  <button
+                    onClick={handleEvaluateAll}
+                    disabled={isLoading || evaluatingAll}
+                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-50 font-medium flex items-center gap-2"
+                  >
+                    {evaluatingAll ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Evaluating...</span>
+                      </>
+                    ) : (
+                      `Evaluate All (${ideas.length - evaluatedCount} remaining)`
+                    )}
+                  </button>
+                </div>
               )}
             </div>
             <div className="space-y-4">
@@ -239,27 +277,52 @@ export default function ChatPage() {
                       <p className="flex-1 text-gray-800 dark:text-gray-200 leading-relaxed">{idea.content}</p>
                     </div>
                     {evaluation ? (
-                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
-                        <div className="flex items-center gap-3 mb-3">
-                          <span className="font-semibold text-gray-800 dark:text-gray-200">Evaluation:</span>
-                          {evaluation.overallScore && (
-                            <span className="text-xl font-bold text-green-600 dark:text-green-400">
+                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-5 border border-green-200 dark:border-green-800 mt-4">
+                        <div className="flex items-center gap-3 mb-4 pb-3 border-b border-green-200 dark:border-green-700">
+                          <span className="font-semibold text-gray-800 dark:text-gray-200">Overall Rating:</span>
+                          {evaluation.overallScore !== null ? (
+                            <span className={`text-2xl font-bold ${
+                              evaluation.overallScore >= 8 
+                                ? 'text-green-600 dark:text-green-400' 
+                                : evaluation.overallScore >= 6 
+                                ? 'text-yellow-600 dark:text-yellow-400' 
+                                : 'text-red-600 dark:text-red-400'
+                            }`}>
                               {evaluation.overallScore.toFixed(1)}/10
                             </span>
+                          ) : (
+                            <span className="text-sm text-gray-500 dark:text-gray-400">N/A</span>
                           )}
                         </div>
-                        <div className="prose dark:prose-invert max-w-none text-sm text-gray-700 dark:text-gray-300">
-                          <ReactMarkdown>{evaluation.notes || ''}</ReactMarkdown>
+                        <div className="prose dark:prose-invert max-w-none text-sm text-gray-700 dark:text-gray-300 leading-relaxed space-y-4">
+                          <ReactMarkdown
+                            components={{
+                              h3: ({node, ...props}) => <h3 className="text-base font-semibold mt-4 mb-2 text-gray-900 dark:text-gray-100" {...props} />,
+                              p: ({node, ...props}) => <p className="mb-3 leading-relaxed" {...props} />,
+                              strong: ({node, ...props}) => <strong className="font-semibold text-gray-900 dark:text-gray-100" {...props} />,
+                              ul: ({node, ...props}) => <ul className="list-disc list-inside mb-3 space-y-1 ml-4" {...props} />,
+                              ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-3 space-y-1 ml-4" {...props} />,
+                            }}
+                          >
+                            {evaluation.notes || ''}
+                          </ReactMarkdown>
                         </div>
                       </div>
                     ) : (
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 mt-3">
                         <button
                           onClick={() => handleEvaluate(idea.id)}
-                          disabled={evaluatingId === idea.id || isLoading}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm font-medium"
+                          disabled={evaluatingId === idea.id || isLoading || evaluatingAll}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm font-medium flex items-center gap-2"
                         >
-                          {evaluatingId === idea.id ? 'Evaluating...' : 'Evaluate'}
+                          {evaluatingId === idea.id ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              <span>Evaluating...</span>
+                            </>
+                          ) : (
+                            'Evaluate'
+                          )}
                         </button>
                       </div>
                     )}
@@ -276,17 +339,31 @@ export default function ChatPage() {
             <button
               onClick={handleGenerate}
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50"
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {isLoading ? 'Generating...' : 'Generate Marketing Angles'}
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Generating Marketing Angles...</span>
+                </>
+              ) : (
+                'Generate Marketing Angles'
+              )}
             </button>
           ) : allEvaluated ? (
             <button
               onClick={handleGenerateFinal}
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 shadow-lg hover:shadow-xl"
+              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
             >
-              {isLoading ? 'Generating...' : 'Generate 3 Final Chosen Angles'}
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Generating Final Angles...</span>
+                </>
+              ) : (
+                'Generate 3 Final Chosen Angles'
+              )}
             </button>
           ) : (
             <p className="text-center text-gray-600 dark:text-gray-400">
