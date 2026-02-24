@@ -82,8 +82,10 @@ export default function ChatPage() {
   }
 
   const handleEvaluate = async (ideaId: string) => {
+    console.log('handleEvaluate called with ideaId:', ideaId)
     setEvaluatingId(ideaId)
     try {
+      console.log('Sending evaluation request...', { conversationId, action: 'evaluate', ideaId })
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,18 +96,32 @@ export default function ChatPage() {
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to evaluate')
+      console.log('Response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Error response:', errorData)
+        throw new Error(errorData.error || `Failed to evaluate: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('Evaluation successful:', data)
       await fetchConversation()
       setEvaluatedCount(prev => prev + 1)
     } catch (error) {
       console.error('Error evaluating idea:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to evaluate idea. Please check the console for details.'
+      alert(`Error: ${errorMessage}`)
     } finally {
       setEvaluatingId(null)
     }
   }
 
   const handleEvaluateAll = async () => {
+    console.log('handleEvaluateAll called')
     const unevaluatedCount = ideas.filter(i => i.evaluations?.length === 0).length
+    console.log('Unevaluated count:', unevaluatedCount)
+    
     if (unevaluatedCount === 0) {
       alert('All ideas have already been evaluated!')
       return
@@ -116,6 +132,7 @@ export default function ChatPage() {
     setIsLoading(true)
     
     try {
+      console.log('Sending evaluate_all request...', { conversationId, action: 'evaluate_all' })
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,12 +142,16 @@ export default function ChatPage() {
         }),
       })
 
+      console.log('Response status:', response.status, response.statusText)
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Failed to evaluate all ideas')
+        console.error('Error response:', errorData)
+        throw new Error(errorData.error || `Failed to evaluate all ideas: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
+      console.log('Evaluate all successful:', data)
       setEvaluationProgress({ current: data.count || unevaluatedCount, total: unevaluatedCount })
       
       // Refresh conversation data
@@ -141,7 +162,8 @@ export default function ChatPage() {
       setEvaluatedCount(updatedData.ideas?.filter((i: Idea) => i.evaluations?.length > 0).length || 0)
     } catch (error) {
       console.error('Error evaluating all ideas:', error)
-      alert(`Error: ${error instanceof Error ? error.message : 'Failed to evaluate all ideas'}`)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to evaluate all ideas. Please check the console for details.'
+      alert(`Error: ${errorMessage}`)
     } finally {
       setIsLoading(false)
       setEvaluatingAll(false)
