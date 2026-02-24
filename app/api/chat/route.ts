@@ -359,46 +359,51 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Generate final angles after all evaluations
-      if (evaluations.length > 0) {
-        const allIdeas = await prisma.idea.findMany({
-          where: { conversationId },
-          include: { evaluations: true },
-        })
-        const allIdeaContents = allIdeas.map(i => i.content)
-        const allEvaluationNotes = allIdeas.flatMap(i => i.evaluations.map(e => e.notes || ''))
+      // Generate final angles after all evaluations (only if all were completed)
+      if (evaluations.length > 0 && evaluations.length === unevaluatedIdeas.length) {
+        try {
+          const allIdeas = await prisma.idea.findMany({
+            where: { conversationId },
+            include: { evaluations: true },
+          })
+          const allIdeaContents = allIdeas.map(i => i.content)
+          const allEvaluationNotes = allIdeas.flatMap(i => i.evaluations.map(e => e.notes || ''))
 
-        const finalAnglesPrompt = getPostEvaluationAnglePrompt(
-          allIdeaContents,
-          allEvaluationNotes,
-          conversation.productDescription
-        )
-
-        // Use timeout to prevent 504 errors
-        const finalAnglesCompletion = await Promise.race([
-          openai.chat.completions.create({
-            model: 'gpt-4',
-            messages: [
-              { role: 'system', content: 'You are an expert copywriter generating high-potential marketing angles.' },
-              { role: 'user', content: finalAnglesPrompt },
-            ],
-            temperature: 0.9,
-            max_tokens: 1500, // Limit tokens to speed up response
-          }),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 20000)
+          const finalAnglesPrompt = getPostEvaluationAnglePrompt(
+            allIdeaContents,
+            allEvaluationNotes,
+            conversation.productDescription
           )
-        ]) as any
-        const finalAnglesContent = finalAnglesCompletion.choices[0]?.message?.content || 'No final angles generated'
 
-        await prisma.message.create({
-          data: {
-            conversationId,
-            role: 'assistant',
-            content: `## ✅ All Ideas Evaluated!\n\n${finalAnglesContent}`,
-            messageType: 'evaluation_summary',
-          },
-        })
+          // Use timeout to prevent 504 errors
+          const finalAnglesCompletion = await Promise.race([
+            openai.chat.completions.create({
+              model: 'gpt-4',
+              messages: [
+                { role: 'system', content: 'You are an expert copywriter generating high-potential marketing angles.' },
+                { role: 'user', content: finalAnglesPrompt },
+              ],
+              temperature: 0.9,
+              max_tokens: 1500, // Limit tokens to speed up response
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 20000)
+            )
+          ]) as any
+          const finalAnglesContent = finalAnglesCompletion.choices[0]?.message?.content || 'No final angles generated'
+
+          await prisma.message.create({
+            data: {
+              conversationId,
+              role: 'assistant',
+              content: `## ✅ All Ideas Evaluated!\n\n${finalAnglesContent}`,
+              messageType: 'evaluation_summary',
+            },
+          })
+        } catch (finalError) {
+          console.error('Error generating final angles:', finalError)
+          // Don't fail the whole request if final angles generation fails
+        }
       }
 
       return NextResponse.json({ 

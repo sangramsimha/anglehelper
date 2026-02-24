@@ -223,6 +223,11 @@ export default function ChatPage() {
       // Update evaluated count
       const updatedData = await fetch(`/api/conversations/${conversationId}`).then(r => r.json())
       setEvaluatedCount(updatedData.ideas?.filter((i: Idea) => i.evaluations?.length > 0).length || 0)
+      
+      // Show message if partial completion
+      if (data.partial) {
+        alert(`Note: ${data.message || `Evaluated ${data.count} of ${unevaluatedCount} ideas. Please evaluate the remaining ideas individually.`}`)
+      }
     } catch (error) {
       console.error('Error evaluating all ideas:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to evaluate all ideas. Please check the console for details.'
