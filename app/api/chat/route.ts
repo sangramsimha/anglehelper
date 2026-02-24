@@ -292,13 +292,30 @@ export async function POST(request: NextRequest) {
       }
 
       const evaluations = []
+      const startTime = Date.now()
+      const MAX_BATCH_TIME = 20000 // 20 seconds max for entire batch
+      
       for (let i = 0; i < unevaluatedIdeas.length; i++) {
+        // Check if we're running out of time
+        const elapsed = Date.now() - startTime
+        if (elapsed > MAX_BATCH_TIME) {
+          console.log(`Batch evaluation timeout after ${elapsed}ms, processed ${i}/${unevaluatedIdeas.length} ideas`)
+          // Return partial results
+          return NextResponse.json({
+            success: true,
+            evaluations,
+            count: evaluations.length,
+            partial: true,
+            message: `Partially completed: Evaluated ${evaluations.length} of ${unevaluatedIdeas.length} ideas. Please evaluate the remaining ideas individually.`
+          })
+        }
+        
         const idea = unevaluatedIdeas[i]
         console.log(`Evaluating idea ${i + 1}/${unevaluatedIdeas.length}:`, idea.id)
         try {
           const prompt = getEvaluationPrompt(idea.content, conversation.productDescription)
 
-          // Use timeout to prevent 504 errors
+          // Use shorter timeout for batch operations (15 seconds per idea)
           const completion = await Promise.race([
             openai.chat.completions.create({
               model: 'gpt-4',
@@ -307,10 +324,10 @@ export async function POST(request: NextRequest) {
                 { role: 'user', content: prompt },
               ],
               temperature: 0.7,
-              max_tokens: 1500, // Limit tokens to speed up response
+              max_tokens: 1200, // Reduced tokens for faster batch processing
             }),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 20000)
+              setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 15000)
             )
           ]) as any
 
@@ -338,9 +355,9 @@ export async function POST(request: NextRequest) {
 
           console.log(`Completed evaluation ${i + 1}/${unevaluatedIdeas.length}`)
 
-          // Add a small delay to avoid rate limits
+          // Reduced delay to speed up batch processing
           if (i < unevaluatedIdeas.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 500))
+            await new Promise(resolve => setTimeout(resolve, 200))
           }
         } catch (error: any) {
           console.error(`Error evaluating idea ${idea.id}:`, error)
@@ -353,6 +370,18 @@ export async function POST(request: NextRequest) {
               },
               { status: 429 }
             )
+          }
+          
+          // If it's a timeout, return partial results
+          if (error?.message?.includes('timeout') || error?.message?.includes('Timeout')) {
+            console.log(`Timeout during batch evaluation, processed ${i}/${unevaluatedIdeas.length} ideas`)
+            return NextResponse.json({
+              success: true,
+              evaluations,
+              count: evaluations.length,
+              partial: true,
+              message: `Partially completed: Evaluated ${evaluations.length} of ${unevaluatedIdeas.length} ideas before timeout. Please evaluate the remaining ideas individually.`
+            })
           }
           
           // Continue with other ideas even if one fails
