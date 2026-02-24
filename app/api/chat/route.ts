@@ -164,6 +164,8 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ content, ideasExtracted })
+
+        return NextResponse.json({ content, ideasExtracted })
       } catch (generateError) {
         console.error('Error in generate action:', generateError)
         throw generateError
