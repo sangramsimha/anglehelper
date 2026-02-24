@@ -91,53 +91,19 @@ export async function POST(request: NextRequest) {
         })
         console.log('Message saved to database')
 
-      // Extract and save ideas (improved extraction for structured format)
-      // Handle format like: "1. Angle: "..."\nExplanation: ...\nFramework: ..."
-      
-      let ideasExtracted = 0
-      
-      // Method 1: Try structured format with "Angle:" label
-      const anglePattern = /\d+[\.\)]\s*Angle[:\s]+["']?([^"'\n]+)["']?/gi
-      let match
-      while ((match = anglePattern.exec(content)) !== null) {
-        let ideaText = match[1]
-          .replace(/^["']|["']$/g, '')
-          .trim()
+        // Extract and save ideas (improved extraction for structured format)
+        // Handle format like: "1. Angle: "..."\nExplanation: ...\nFramework: ..."
         
-        if (ideaText.length > 10 && ideaText.length < 300) {
-          try {
-            await prisma.idea.create({
-              data: {
-                conversationId,
-                content: ideaText,
-              },
-            })
-            ideasExtracted++
-          } catch (error) {
-            console.error('Error saving idea:', error)
-          }
-        }
-      }
-      
-      // Method 2: If no ideas extracted, try simple numbered list
-      if (ideasExtracted === 0) {
-        const simplePattern = /\d+[\.\)]\s*(.+?)(?=\n\s*\d+[\.\)]|$)/gms
-        const simpleMatches = content.match(simplePattern)
+        let ideasExtracted = 0
         
-        if (simpleMatches) {
-          for (const match of simpleMatches) {
-            let ideaText = match
-              .replace(/^\d+[\.\)]\s*/, '')
-              .replace(/^Angle[:\s]+/i, '')
-              .replace(/["']/g, '')
-              .split('\n')[0]
+        try {
+          // Method 1: Try structured format with "Angle:" label
+          const anglePattern = /\d+[\.\)]\s*Angle[:\s]+["']?([^"'\n]+)["']?/gi
+          let match
+          while ((match = anglePattern.exec(content)) !== null) {
+            let ideaText = match[1]
+              .replace(/^["']|["']$/g, '')
               .trim()
-            
-            // Skip if it looks like it's part of Explanation or Framework
-            if (ideaText.toLowerCase().startsWith('explanation') || 
-                ideaText.toLowerCase().startsWith('framework')) {
-              continue
-            }
             
             if (ideaText.length > 10 && ideaText.length < 300) {
               try {
@@ -153,10 +119,49 @@ export async function POST(request: NextRequest) {
               }
             }
           }
+          
+          // Method 2: If no ideas extracted, try simple numbered list
+          if (ideasExtracted === 0) {
+            const simplePattern = /\d+[\.\)]\s*(.+?)(?=\n\s*\d+[\.\)]|$)/gms
+            const simpleMatches = content.match(simplePattern)
+            
+            if (simpleMatches) {
+              for (const match of simpleMatches) {
+                let ideaText = match
+                  .replace(/^\d+[\.\)]\s*/, '')
+                  .replace(/^Angle[:\s]+/i, '')
+                  .replace(/["']/g, '')
+                  .split('\n')[0]
+                  .trim()
+                
+                // Skip if it looks like it's part of Explanation or Framework
+                if (ideaText.toLowerCase().startsWith('explanation') || 
+                    ideaText.toLowerCase().startsWith('framework')) {
+                  continue
+                }
+                
+                if (ideaText.length > 10 && ideaText.length < 300) {
+                  try {
+                    await prisma.idea.create({
+                      data: {
+                        conversationId,
+                        content: ideaText,
+                      },
+                    })
+                    ideasExtracted++
+                  } catch (error) {
+                    console.error('Error saving idea:', error)
+                  }
+                }
+              }
+            }
+          }
+          
+          console.log(`Extracted ${ideasExtracted} ideas from content`)
+        } catch (extractError) {
+          console.error('Error extracting ideas:', extractError)
+          // Continue even if extraction fails - at least the message is saved
         }
-      }
-      
-        console.log(`Extracted ${ideasExtracted} ideas from content`)
 
         return NextResponse.json({ content, ideasExtracted })
       } catch (generateError) {
