@@ -85,6 +85,11 @@ export default function ChatPage() {
         }
         console.error('Error response:', errorData, 'Status:', response.status)
         
+        // Special handling for timeout errors
+        if (response.status === 504 || errorData.error?.includes('timeout') || errorData.error?.includes('timed out')) {
+          throw new Error('Request timed out. The server is taking too long to respond. Please try again - this usually happens during high traffic periods.')
+        }
+        
         // Special handling for quota errors
         if (response.status === 429 || errorData.error?.includes('quota') || errorData.error?.includes('billing')) {
           throw new Error('OpenAI API quota exceeded. Please check your OpenAI account billing at https://platform.openai.com/account/billing and ensure you have credits available.')
@@ -131,6 +136,11 @@ export default function ChatPage() {
           console.error('Failed to parse error response:', e)
         }
         console.error('Error response:', errorData, 'Status:', response.status)
+        
+        // Special handling for timeout errors
+        if (response.status === 504 || errorData.error?.includes('timeout') || errorData.error?.includes('timed out')) {
+          throw new Error('Request timed out. The server is taking too long to respond. Please try again - this usually happens during high traffic periods.')
+        }
         
         // Special handling for quota errors
         if (response.status === 429 || errorData.error?.includes('quota') || errorData.error?.includes('billing')) {
@@ -189,6 +199,11 @@ export default function ChatPage() {
           console.error('Failed to parse error response:', e)
         }
         console.error('Error response:', errorData, 'Status:', response.status)
+        
+        // Special handling for timeout errors
+        if (response.status === 504 || errorData.error?.includes('timeout') || errorData.error?.includes('timed out')) {
+          throw new Error('Request timed out. The server is taking too long to respond. Please try again - this usually happens during high traffic periods.')
+        }
         
         // Special handling for quota errors
         if (response.status === 429 || errorData.error?.includes('quota') || errorData.error?.includes('billing')) {
@@ -253,6 +268,11 @@ export default function ChatPage() {
           console.error('Failed to parse error response:', e)
         }
         console.error('Error response:', errorData, 'Status:', response.status)
+        
+        // Special handling for timeout errors
+        if (response.status === 504 || errorData.error?.includes('timeout') || errorData.error?.includes('timed out')) {
+          throw new Error('Request timed out. The server is taking too long to respond. Please try again - this usually happens during high traffic periods.')
+        }
         
         // Special handling for quota errors
         if (response.status === 429 || errorData.error?.includes('quota') || errorData.error?.includes('billing')) {

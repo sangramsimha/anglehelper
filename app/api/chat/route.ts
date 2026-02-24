@@ -68,14 +68,21 @@ export async function POST(request: NextRequest) {
         const prompt = getAngleGenerationPrompt(conversation.productDescription)
         console.log('Prompt generated, calling OpenAI...')
         
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4',
-          messages: [
-            { role: 'system', content: 'You are an expert copywriter specializing in marketing angles and advertising ideas.' },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.8,
-        })
+        // Use timeout to prevent 504 errors - Netlify functions have ~10-26 second limits
+        const completion = await Promise.race([
+          openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: [
+              { role: 'system', content: 'You are an expert copywriter specializing in marketing angles and advertising ideas.' },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.8,
+            max_tokens: 2000, // Limit tokens to speed up response
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 20000)
+          )
+        ]) as any
 
         const content = completion.choices[0]?.message?.content || 'No response generated'
         console.log('OpenAI response received, length:', content.length)
@@ -202,14 +209,21 @@ export async function POST(request: NextRequest) {
       const prompt = getEvaluationPrompt(idea.content, conversation.productDescription)
 
       try {
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4',
-          messages: [
-            { role: 'system', content: 'You are an expert marketing evaluator using the Big Marketing Idea Formula. Always provide comprehensive evaluations covering Primary Promise, Unique Mechanism, and Intellectually Interesting components.' },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.7,
-        })
+        // Use timeout to prevent 504 errors
+        const completion = await Promise.race([
+          openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: [
+              { role: 'system', content: 'You are an expert marketing evaluator using the Big Marketing Idea Formula. Always provide comprehensive evaluations covering Primary Promise, Unique Mechanism, and Intellectually Interesting components.' },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.7,
+            max_tokens: 1500, // Limit tokens to speed up response
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 20000)
+          )
+        ]) as any
 
         const content = completion.choices[0]?.message?.content || 'No evaluation generated'
         console.log('Evaluation generated, length:', content.length)
@@ -284,14 +298,21 @@ export async function POST(request: NextRequest) {
         try {
           const prompt = getEvaluationPrompt(idea.content, conversation.productDescription)
 
-          const completion = await openai.chat.completions.create({
-            model: 'gpt-4',
-            messages: [
-              { role: 'system', content: 'You are an expert marketing evaluator using the Big Marketing Idea Formula. Always provide comprehensive evaluations covering Primary Promise, Unique Mechanism, and Intellectually Interesting components.' },
-              { role: 'user', content: prompt },
-            ],
-            temperature: 0.7,
-          })
+          // Use timeout to prevent 504 errors
+          const completion = await Promise.race([
+            openai.chat.completions.create({
+              model: 'gpt-4',
+              messages: [
+                { role: 'system', content: 'You are an expert marketing evaluator using the Big Marketing Idea Formula. Always provide comprehensive evaluations covering Primary Promise, Unique Mechanism, and Intellectually Interesting components.' },
+                { role: 'user', content: prompt },
+              ],
+              temperature: 0.7,
+              max_tokens: 1500, // Limit tokens to speed up response
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 20000)
+            )
+          ]) as any
 
           const content = completion.choices[0]?.message?.content || 'No evaluation generated'
 
@@ -353,14 +374,21 @@ export async function POST(request: NextRequest) {
           conversation.productDescription
         )
 
-        const finalAnglesCompletion = await openai.chat.completions.create({
-          model: 'gpt-4',
-          messages: [
-            { role: 'system', content: 'You are an expert copywriter generating high-potential marketing angles.' },
-            { role: 'user', content: finalAnglesPrompt },
-          ],
-          temperature: 0.9,
-        })
+        // Use timeout to prevent 504 errors
+        const finalAnglesCompletion = await Promise.race([
+          openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: [
+              { role: 'system', content: 'You are an expert copywriter generating high-potential marketing angles.' },
+              { role: 'user', content: finalAnglesPrompt },
+            ],
+            temperature: 0.9,
+            max_tokens: 1500, // Limit tokens to speed up response
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 20000)
+          )
+        ]) as any
         const finalAnglesContent = finalAnglesCompletion.choices[0]?.message?.content || 'No final angles generated'
 
         await prisma.message.create({
@@ -389,14 +417,21 @@ export async function POST(request: NextRequest) {
         conversation.productDescription
       )
 
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          { role: 'system', content: 'You are an expert copywriter generating high-potential marketing angles.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.9,
-      })
+      // Use timeout to prevent 504 errors
+      const completion = await Promise.race([
+        openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            { role: 'system', content: 'You are an expert copywriter generating high-potential marketing angles.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.9,
+          max_tokens: 1500, // Limit tokens to speed up response
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 20000)
+        )
+      ]) as any
 
       const content = completion.choices[0]?.message?.content || 'No angles generated'
 
@@ -419,6 +454,16 @@ export async function POST(request: NextRequest) {
     )
   } catch (error: any) {
     console.error('Error in chat API:', error)
+    
+    // Handle timeout errors
+    if (error?.message?.includes('timeout') || error?.message?.includes('Timeout') || error?.code === 'ETIMEDOUT') {
+      return NextResponse.json(
+        { 
+          error: 'Request timed out. The OpenAI API is taking too long to respond. This may happen during high traffic. Please try again in a moment.'
+        },
+        { status: 504 }
+      )
+    }
     
     // Handle OpenAI quota/billing errors
     if (error?.status === 429 || error?.message?.includes('quota') || error?.message?.includes('billing') || error?.message?.includes('exceeded')) {
