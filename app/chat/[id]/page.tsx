@@ -15,6 +15,7 @@ interface Message {
 interface Idea {
   id: string
   content: string
+  frameworkUsed?: string | null
   evaluations: Array<{
     id: string
     overallScore: number | null
@@ -34,6 +35,10 @@ export default function ChatPage() {
   const [evaluatedCount, setEvaluatedCount] = useState(0)
   const [evaluatingAll, setEvaluatingAll] = useState(false)
   const [evaluationProgress, setEvaluationProgress] = useState({ current: 0, total: 0 })
+  const [customAngleText, setCustomAngleText] = useState('')
+  const [evaluatingOwn, setEvaluatingOwn] = useState(false)
+  const [continueMessage, setContinueMessage] = useState('')
+  const [sendingContinue, setSendingContinue] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -302,6 +307,68 @@ export default function ChatPage() {
   const hasGeneratedIdeas = ideas.length > 0
   const allEvaluated = ideas.length > 0 && evaluatedCount === ideas.length
 
+  const handleEvaluateOwnAngle = async () => {
+    const text = customAngleText.trim()
+    if (!text || text.length < 10) {
+      alert('Please enter an angle of at least 10 characters.')
+      return
+    }
+    setEvaluatingOwn(true)
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId,
+          action: 'evaluate_own_angle',
+          customAngleText: text,
+        }),
+      })
+      if (!response.ok) {
+        const err = await response.json()
+        throw new Error(err.error || 'Failed to evaluate')
+      }
+      setCustomAngleText('')
+      await fetchConversation()
+      setEvaluatedCount((prev) => prev + 1)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to evaluate angle')
+    } finally {
+      setEvaluatingOwn(false)
+    }
+  }
+
+  const handleContinueChat = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const text = continueMessage.trim()
+    if (!text || sendingContinue) return
+    setSendingContinue(true)
+    setContinueMessage('')
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId,
+          action: 'continue',
+          userMessage: text,
+        }),
+      })
+      if (!response.ok) {
+        const err = await response.json()
+        throw new Error(err.error || 'Failed to send message')
+      }
+      const data = await response.json()
+      await fetchConversation()
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to send message')
+      setContinueMessage(text)
+    } finally {
+      setSendingContinue(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="container mx-auto px-4 py-8">
@@ -323,6 +390,45 @@ export default function ChatPage() {
               ← Home
             </button>
           </div>
+        </div>
+
+        {/* Actions - Generate Marketing Angles at top */}
+        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-lg p-6 mb-6">
+          {!hasGeneratedIdeas ? (
+            <button
+              onClick={handleGenerate}
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Generating Marketing Angles...</span>
+                </>
+              ) : (
+                'Generate Marketing Angles'
+              )}
+            </button>
+          ) : allEvaluated ? (
+            <button
+              onClick={handleGenerateFinal}
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Generating Final Angles...</span>
+                </>
+              ) : (
+                'Generate 3 Final Chosen Angles'
+              )}
+            </button>
+          ) : (
+            <p className="text-center text-gray-600 dark:text-gray-400">
+              Evaluate all ideas to generate final angles
+            </p>
+          )}
         </div>
 
         {/* Messages */}
@@ -394,7 +500,12 @@ export default function ChatPage() {
                       <span className="flex-shrink-0 w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center font-semibold text-purple-600 dark:text-purple-400">
                         {index + 1}
                       </span>
-                      <p className="flex-1 text-gray-800 dark:text-gray-200 leading-relaxed">{idea.content}</p>
+                      <div className="flex-1">
+                        {idea.frameworkUsed === 'own' && (
+                          <span className="inline-block text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/30 px-2 py-0.5 rounded mb-1">Your angle</span>
+                        )}
+                        <p className="text-gray-800 dark:text-gray-200 leading-relaxed">{idea.content}</p>
+                      </div>
                     </div>
                     {evaluation ? (
                       <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-5 border border-green-200 dark:border-green-800 mt-4">
@@ -453,43 +564,65 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Actions */}
-        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-lg p-6">
-          {!hasGeneratedIdeas ? (
+        {/* Evaluate your own angle */}
+        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-lg p-6 mb-6">
+          <h2 className="text-xl font-bold mb-3">Evaluate your own angle</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Paste or type any marketing angle and get a Big Marketing Idea Formula evaluation.
+          </p>
+          <div className="flex gap-3 flex-wrap">
+            <textarea
+              value={customAngleText}
+              onChange={(e) => setCustomAngleText(e.target.value)}
+              placeholder="e.g., Discover the one habit that doubled our users’ productivity in 30 days"
+              className="flex-1 min-w-[200px] px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white resize-none"
+              rows={2}
+              disabled={evaluatingOwn}
+            />
             <button
-              onClick={handleGenerate}
-              disabled={isLoading}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              onClick={handleEvaluateOwnAngle}
+              disabled={evaluatingOwn || !customAngleText.trim() || customAngleText.trim().length < 10}
+              className="px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 font-medium flex items-center gap-2 self-end"
             >
-              {isLoading ? (
+              {evaluatingOwn ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Generating Marketing Angles...</span>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Evaluating...</span>
                 </>
               ) : (
-                'Generate Marketing Angles'
+                'Evaluate this angle'
               )}
             </button>
-          ) : allEvaluated ? (
+          </div>
+        </div>
+
+        {/* Continue conversation (ChatGPT-style) */}
+        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-lg p-6 sticky bottom-4 z-10">
+          <h2 className="text-lg font-bold mb-2">Continue the conversation</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Ask follow-ups about your angles, evaluations, or strategy. The AI has full context of your product, angles, and evaluations.
+          </p>
+          <form onSubmit={handleContinueChat} className="flex gap-3">
+            <input
+              type="text"
+              value={continueMessage}
+              onChange={(e) => setContinueMessage(e.target.value)}
+              placeholder="e.g., How can I strengthen angle #2? Or: Give me one more angle based on the evaluations"
+              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white"
+              disabled={sendingContinue}
+            />
             <button
-              onClick={handleGenerateFinal}
-              disabled={isLoading}
-              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+              type="submit"
+              disabled={sendingContinue || !continueMessage.trim()}
+              className="px-5 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50 font-medium"
             >
-              {isLoading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Generating Final Angles...</span>
-                </>
+              {sendingContinue ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
-                'Generate 3 Final Chosen Angles'
+                'Send'
               )}
             </button>
-          ) : (
-            <p className="text-center text-gray-600 dark:text-gray-400">
-              Evaluate all ideas to generate final angles
-            </p>
-          )}
+          </form>
         </div>
       </div>
     </div>

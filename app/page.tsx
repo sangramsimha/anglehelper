@@ -27,15 +27,27 @@ export default function Home() {
         body: JSON.stringify({ productDescription }),
       })
 
+      const text = await response.text()
+      let data: { id?: string; conversation?: { id?: string }; error?: string; details?: string }
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        // Server returned HTML (e.g. error page) instead of JSON
+        setError(
+          response.ok
+            ? 'Invalid response from server.'
+            : 'Server error. Check that DATABASE_URL and OPENAI_API_KEY in .env are correct and the database is reachable.'
+        )
+        setIsLoading(false)
+        return
+      }
+
       if (!response.ok) {
-        const data = await response.json()
         const errorMsg = data.error || 'Failed to create conversation'
         const details = data.details ? `: ${data.details}` : ''
         throw new Error(`${errorMsg}${details}`)
       }
 
-      const data = await response.json()
-      // Handle both response formats: { id } or { conversation: { id } }
       const conversationId = data.id || data.conversation?.id
       if (!conversationId) {
         throw new Error('Invalid response from server')

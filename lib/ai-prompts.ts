@@ -135,3 +135,30 @@ For each angle, provide:
 
 Format as 3 distinct, high-potential angles, clearly numbered.`
 }
+
+/** Build system context for continue-chat: product, ideas, and evaluations so the model can reference them. */
+export function getContinueChatContext(
+  productDescription: string,
+  ideas: Array<{ content: string; evaluations: Array<{ overallScore: number | null; notes: string | null }> }>
+): string {
+  const ideasBlock =
+    ideas.length === 0
+      ? 'No angles have been generated or evaluated yet.'
+      : ideas
+          .map((idea, i) => {
+            const ev = idea.evaluations[0]
+            const score = ev?.overallScore != null ? ` (score: ${ev.overallScore}/10)` : ''
+            const notes = ev?.notes ? `\n   Evaluation: ${ev.notes.slice(0, 400)}${ev.notes.length > 400 ? '...' : ''}` : ''
+            return `${i + 1}. "${idea.content}"${score}${notes}`
+          })
+          .join('\n\n')
+  return `You are an expert copywriter and marketing strategist helping the user refine their marketing angles. You are continuing a conversation about a product and its marketing angles.
+
+Product description:
+${productDescription}
+
+Angles and evaluations so far:
+${ideasBlock}
+
+Reference the above product, angles, and evaluations when answering. The user may ask to refine angles, get more ideas, explain evaluations, or discuss strategy. Be concise and actionable.`
+}

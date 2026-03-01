@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { prisma } from '@/lib/db'
-import { getAngleGenerationPrompt, getEvaluationPrompt, getPostEvaluationAnglePrompt } from '@/lib/ai-prompts'
+import { getAngleGenerationPrompt, getEvaluationPrompt, getPostEvaluationAnglePrompt, getContinueChatContext } from '@/lib/ai-prompts'
 
 function getOpenAIClient(): OpenAI {
   const apiKey = process.env.OPENAI_API_KEY
@@ -16,7 +16,7 @@ function getOpenAIClient(): OpenAI {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { conversationId, action, ideaId, evaluatedIdeas, evaluations } = body
+    const { conversationId, action, ideaId, evaluatedIdeas, evaluations, customAngleText, userMessage } = body
 
     console.log('Chat API called with:', { action, conversationId, ideaId })
 
@@ -171,8 +171,6 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ content, ideasExtracted })
-
-        return NextResponse.json({ content, ideasExtracted })
       } catch (generateError: any) {
         console.error('Error in generate action:', generateError)
         
@@ -269,6 +267,66 @@ export async function POST(request: NextRequest) {
         }
         
         throw openaiError
+      }
+    }
+
+    // Evaluate user's own angle (custom text) - creates an Idea then evaluates it
+    if (action === 'evaluate_own_angle' && customAngleText && typeof customAngleText === 'string') {
+      const angleText = customAngleText.trim()
+      if (!angleText || angleText.length < 10) {
+        return NextResponse.json(
+          { error: 'Please provide an angle of at least 10 characters' },
+          { status: 400 }
+        )
+      }
+      console.log('Evaluating own angle for conversation:', conversationId)
+      try {
+        const idea = await prisma.idea.create({
+          data: {
+            conversationId,
+            content: angleText,
+            frameworkUsed: 'own',
+          },
+        })
+        const prompt = getEvaluationPrompt(idea.content, conversation.productDescription)
+        const completion = await Promise.race([
+          openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: [
+              { role: 'system', content: 'You are an expert marketing evaluator using the Big Marketing Idea Formula. Always provide comprehensive evaluations covering Primary Promise, Unique Mechanism, and Intellectually Interesting components.' },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.7,
+            max_tokens: 1500,
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 20000)
+          ),
+        ]) as any
+        const content = completion.choices[0]?.message?.content || 'No evaluation generated'
+        const scoreMatch = content.match(/(?:Overall Rating|Rating|Score|overall rating)[:\s]*(\d+(?:\.\d+)?)\s*(?:out of|\/)?\s*10/i) ||
+          content.match(/(\d+(?:\.\d+)?)\s*\/\s*10/i)
+        const overallScore = scoreMatch ? parseFloat(scoreMatch[1]) : null
+        await prisma.evaluation.create({
+          data: { ideaId: idea.id, overallScore, notes: content },
+        })
+        await prisma.message.create({
+          data: {
+            conversationId,
+            role: 'assistant',
+            content,
+            messageType: 'evaluation',
+          },
+        })
+        return NextResponse.json({ content, ideaId: idea.id, overallScore })
+      } catch (err: any) {
+        if (err?.status === 429 || err?.message?.includes('quota') || err?.message?.includes('billing')) {
+          return NextResponse.json(
+            { error: 'OpenAI API quota exceeded. Please check your OpenAI account billing and usage limits.' },
+            { status: 429 }
+          )
+        }
+        throw err
       }
     }
 
@@ -480,6 +538,82 @@ export async function POST(request: NextRequest) {
       })
 
       return NextResponse.json({ content })
+    }
+
+    // Continue conversation with full context (angles + evaluations) - ChatGPT-style
+    if (action === 'continue' && userMessage && typeof userMessage === 'string') {
+      const messageText = userMessage.trim()
+      if (!messageText) {
+        return NextResponse.json(
+          { error: 'Message cannot be empty' },
+          { status: 400 }
+        )
+      }
+      try {
+        const convWithContext = await prisma.conversation.findUnique({
+          where: { id: conversationId },
+          include: {
+            messages: { orderBy: { createdAt: 'asc' } },
+            ideas: { include: { evaluations: true }, orderBy: { createdAt: 'asc' } },
+          },
+        })
+        if (!convWithContext) {
+          return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+        }
+        const systemContext = getContinueChatContext(
+          convWithContext.productDescription,
+          convWithContext.ideas.map((i) => ({
+            content: i.content,
+            evaluations: i.evaluations.map((e) => ({ overallScore: e.overallScore, notes: e.notes })),
+          }))
+        )
+        const recentMessages = convWithContext.messages.slice(-24)
+        const openaiMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
+          { role: 'system', content: systemContext },
+          ...recentMessages.map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })),
+          { role: 'user', content: messageText },
+        ]
+        await prisma.message.create({
+          data: { conversationId, role: 'user', content: messageText },
+        })
+        const completion = await Promise.race([
+          openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: openaiMessages,
+            temperature: 0.7,
+            max_tokens: 1500,
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Request timeout: OpenAI API took too long to respond')), 25000)
+          ),
+        ]) as any
+        const assistantContent = completion.choices[0]?.message?.content || 'No response generated'
+        await prisma.message.create({
+          data: {
+            conversationId,
+            role: 'assistant',
+            content: assistantContent,
+          },
+        })
+        return NextResponse.json({ content: assistantContent })
+      } catch (err: any) {
+        if (err?.status === 429 || err?.message?.includes('quota') || err?.message?.includes('billing')) {
+          return NextResponse.json(
+            { error: 'OpenAI API quota exceeded. Please check your OpenAI account billing and usage limits.' },
+            { status: 429 }
+          )
+        }
+        if (err?.message?.includes('timeout') || err?.message?.includes('Timeout')) {
+          return NextResponse.json(
+            { error: 'Request timed out. Please try again.' },
+            { status: 504 }
+          )
+        }
+        throw err
+      }
     }
 
     return NextResponse.json(
